@@ -136,11 +136,19 @@ IMPORTANT GUIDELINES:
 1. Always start by navigating to the target website
 2. Take a screenshot after every navigation to see the real page state
 3. Use the screenshot content to decide your next action
-4. For search fields, use selectors like: input[type="search"], input[name="q"], [placeholder*="search" i]
-5. For e-commerce: navigate → screenshot → search → screenshot → click product → screenshot → add to cart → checkout
-6. When you see a login wall, describe it and stop
-7. Be precise with selectors - use what you can see in the page structure
-8. Always take a screenshot after clicking to confirm the action worked`;
+4. NEVER give up after one failed attempt - always try multiple approaches
+5. For Macy's search bar, try these selectors in order:
+   - input[placeholder*="looking"]
+   - input[placeholder*="search" i]
+   - input[type="search"]
+   - #globalSearchInput
+6. If typing into a search box fails, navigate directly to search results URL instead.
+   Example: navigate to https://www.macys.com/shop/featured/mens+dress+shirt
+7. For e-commerce: navigate → screenshot → search → screenshot → click product → screenshot → add to cart → checkout
+8. When you see a login wall, describe it and stop
+9. Always take a screenshot after each action to confirm it worked
+10. If a click or type fails, study the screenshot carefully and try a different selector
+11. Prefer direct navigation URLs over UI interaction when UI interaction keeps failing`;
 
 const TOOL_ICONS = {
   navigate: "🌐", click: "👆", type: "⌨️", screenshot: "📷",
