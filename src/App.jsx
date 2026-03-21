@@ -254,12 +254,18 @@ export default function BrowserAgent() {
           // If screenshot, show the image
           if (toolName === "screenshot" && result.startsWith("data:image")) {
             addStep({ type: "screenshot", image: result });
+            // OpenAI only allows image_url in user messages, not tool messages
+            // Send tool result as text, then send image as a follow-up user message
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
+              content: "Screenshot taken successfully. See the attached image in the next message."
+            });
+            messages.push({
+              role: "user",
               content: [
-                { type: "text", text: "Screenshot taken. Analyze the image to determine next steps." },
-                { type: "image_url", image_url: { url: result } }
+                { type: "text", text: "Here is the current screenshot of the browser:" },
+                { type: "image_url", image_url: { url: result, detail: "low" } }
               ]
             });
           } else {
