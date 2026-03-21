@@ -8,7 +8,7 @@ const TOOLS = [
       description: "Navigate the browser to a URL",
       parameters: {
         type: "object",
-        properties: { url: { type: "string", description: "Full URL to navigate to" } },
+        properties: { url: { type: "string" } },
         required: ["url"]
       }
     }
@@ -17,12 +17,12 @@ const TOOLS = [
     type: "function",
     function: {
       name: "click",
-      description: "Click on an element. Use CSS selector or visible text as selector.",
+      description: "Click an element by CSS selector or visible text",
       parameters: {
         type: "object",
         properties: {
-          selector: { type: "string", description: "CSS selector or visible text of element to click" },
-          description: { type: "string", description: "What you are clicking" }
+          selector: { type: "string" },
+          description: { type: "string" }
         },
         required: ["selector", "description"]
       }
@@ -36,9 +36,9 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          selector: { type: "string", description: "CSS selector of the input field" },
-          text: { type: "string", description: "Text to type" },
-          description: { type: "string", description: "Description of the field" }
+          selector: { type: "string" },
+          text: { type: "string" },
+          description: { type: "string" }
         },
         required: ["selector", "text", "description"]
       }
@@ -48,12 +48,10 @@ const TOOLS = [
     type: "function",
     function: {
       name: "screenshot",
-      description: "Take a screenshot to see the current state of the browser",
+      description: "Take a screenshot to see the current browser state",
       parameters: {
         type: "object",
-        properties: {
-          description: { type: "string", description: "Why you are taking this screenshot" }
-        },
+        properties: { description: { type: "string" } },
         required: ["description"]
       }
     }
@@ -67,7 +65,7 @@ const TOOLS = [
         type: "object",
         properties: {
           direction: { type: "string", enum: ["up", "down"] },
-          amount: { type: "number", description: "Pixels to scroll" }
+          amount: { type: "number" }
         },
         required: ["direction", "amount"]
       }
@@ -81,8 +79,8 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          selector: { type: "string", description: "CSS selector or 'body' for full page" },
-          description: { type: "string", description: "What you are extracting" }
+          selector: { type: "string" },
+          description: { type: "string" }
         },
         required: ["selector", "description"]
       }
@@ -92,7 +90,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "wait",
-      description: "Wait for a number of seconds",
+      description: "Wait for a number of seconds for page to load",
       parameters: {
         type: "object",
         properties: {
@@ -107,11 +105,12 @@ const TOOLS = [
     type: "function",
     function: {
       name: "task_complete",
-      description: "Mark the task as complete",
+      description: "Mark task as complete and return extracted notes",
       parameters: {
         type: "object",
         properties: {
           summary: { type: "string" },
+          notes: { type: "string", description: "The full extracted notes content" },
           success: { type: "boolean" }
         },
         required: ["summary", "success"]
@@ -120,35 +119,38 @@ const TOOLS = [
   }
 ];
 
-const SYSTEM_PROMPT = `You are an expert browser automation agent controlling a real web browser.
+const buildSystemPrompt = (ecwUrl, username, password) => `You are a clinical workflow automation agent helping authorized medical staff retrieve patient notes from eClinicalWorks (eCW).
 
-You have access to these tools:
-- navigate: Go to a URL
-- screenshot: See the current page (returns a real screenshot image)
-- click: Click elements using CSS selectors or visible text
-- type: Fill in input fields
-- scroll: Scroll the page
-- extract: Read text from the page
-- wait: Pause execution
-- task_complete: Signal task is done
+CREDENTIALS (use these to log in — never display them in your responses):
+- eCW URL: ${ecwUrl}
+- Username: ${username}
+- Password: ${password}
 
-IMPORTANT GUIDELINES:
-1. Always start by navigating to the target website
-2. Take a screenshot after every navigation to see the real page state
-3. Use the screenshot content to decide your next action
-4. NEVER give up after one failed attempt - always try multiple approaches
-5. For Macy's search bar, try these selectors in order:
-   - input[placeholder*="looking"]
-   - input[placeholder*="search" i]
-   - input[type="search"]
-   - #globalSearchInput
-6. If typing into a search box fails, navigate directly to search results URL instead.
-   Example: navigate to https://www.macys.com/shop/featured/mens+dress+shirt
-7. For e-commerce: navigate → screenshot → search → screenshot → click product → screenshot → add to cart → checkout
-8. When you see a login wall, describe it and stop
-9. Always take a screenshot after each action to confirm it worked
-10. If a click or type fails, study the screenshot carefully and try a different selector
-11. Prefer direct navigation URLs over UI interaction when UI interaction keeps failing`;
+WORKFLOW:
+1. Navigate to the eCW URL
+2. Take a screenshot to see the login page
+3. Enter username into the username field
+4. Enter password into the password field
+5. Click the login/sign in button
+6. Wait for the dashboard to load, take a screenshot
+7. Find the patient search — usually a search bar at the top or a "Patients" menu
+8. Search for the patient by name as instructed
+9. Click on the correct patient from results
+10. Wait for patient chart to load, take a screenshot
+11. Navigate to Progress Notes and/or Encounter Notes
+12. Extract the full text of the notes
+13. Call task_complete with the extracted notes in the "notes" field
+
+IMPORTANT:
+- Never include credentials in your thinking text
+- eCW login fields are often: input[name="username"], input[name="j_username"], #username, input[type="text"]
+- Password fields: input[name="password"], input[name="j_password"], #password, input[type="password"]  
+- If a page takes time to load, use the wait tool (2-3 seconds)
+- If you hit a 2FA screen, take a screenshot and describe what you see
+- Patient search in eCW is often in the top navigation bar
+- Notes are usually under "Encounter" or "Progress Notes" tabs in the patient chart
+- Extract the complete note text using the extract tool on the notes container
+- Be thorough — scroll down to get all note content`;
 
 const TOOL_ICONS = {
   navigate: "🌐", click: "👆", type: "⌨️", screenshot: "📷",
@@ -159,13 +161,17 @@ const TOOL_COLORS = {
   scroll: "#6b7280", extract: "#ef4444", wait: "#6b7280", task_complete: "#10b981"
 };
 
-export default function BrowserAgent() {
+export default function MedicalAgent() {
+  const [screen, setScreen] = useState("disclaimer"); // disclaimer | config | agent
   const [openaiKey, setOpenaiKey] = useState("");
   const [backendUrl, setBackendUrl] = useState("");
-  const [configured, setConfigured] = useState(false);
+  const [ecwUrl, setEcwUrl] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [task, setTask] = useState("");
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState([]);
+  const [extractedNotes, setExtractedNotes] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
   const [agentStatus, setAgentStatus] = useState("idle");
   const stepsEndRef = useRef(null);
@@ -180,7 +186,6 @@ export default function BrowserAgent() {
     setSteps(prev => [...prev, { ...step, id: Date.now() + Math.random() }]);
   }, []);
 
-  // Call the real backend
   async function executeTool(tool, input) {
     const response = await fetch(`${backendUrl}/execute`, {
       method: "POST",
@@ -196,17 +201,18 @@ export default function BrowserAgent() {
     abortRef.current = false;
     setRunning(true);
     setSteps([]);
+    setExtractedNotes("");
     setCurrentUrl("");
     setAgentStatus("thinking");
     sessionId.current = "session_" + Date.now();
 
     const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: buildSystemPrompt(ecwUrl, username, password) },
       { role: "user", content: task }
     ];
 
     let iterCount = 0;
-    const MAX_ITER = 25;
+    const MAX_ITER = 30;
 
     addStep({ type: "task", content: task });
 
@@ -223,7 +229,7 @@ export default function BrowserAgent() {
           },
           body: JSON.stringify({
             model: "gpt-4o",
-            max_tokens: 1000,
+            max_tokens: 1500,
             messages,
             tools: TOOLS,
             tool_choice: "auto"
@@ -237,7 +243,11 @@ export default function BrowserAgent() {
         messages.push(message);
 
         if (message.content?.trim()) {
-          addStep({ type: "thought", content: message.content });
+          // Redact any accidental credential leakage
+          const safeContent = message.content
+            .replace(new RegExp(password, 'g'), '***')
+            .replace(new RegExp(username, 'g'), '***');
+          addStep({ type: "thought", content: safeContent });
         }
 
         if (!message.tool_calls || message.tool_calls.length === 0) {
@@ -254,30 +264,35 @@ export default function BrowserAgent() {
           let toolInput = {};
           try { toolInput = JSON.parse(toolCall.function.arguments); } catch {}
 
-          addStep({ type: "tool", tool: toolName, input: toolInput });
+          // Don't show credentials in the UI
+          const safeInput = { ...toolInput };
+          if (safeInput.text && (safeInput.text === password || safeInput.text === username)) {
+            safeInput.text = "***";
+          }
 
-          // Execute on real browser via backend
+          addStep({ type: "tool", tool: toolName, input: safeInput });
+
           const result = await executeTool(toolName, toolInput);
 
-          // If screenshot, show the image
           if (toolName === "screenshot" && result.startsWith("data:image")) {
             addStep({ type: "screenshot", image: result });
-            // OpenAI only allows image_url in user messages, not tool messages
-            // Send tool result as text, then send image as a follow-up user message
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: "Screenshot taken successfully. See the attached image in the next message."
+              content: "Screenshot taken."
             });
             messages.push({
               role: "user",
               content: [
-                { type: "text", text: "Here is the current screenshot of the browser:" },
-                { type: "image_url", image_url: { url: result, detail: "low" } }
+                { type: "text", text: "Current browser screenshot:" },
+                { type: "image_url", image_url: { url: result, detail: "high" } }
               ]
             });
           } else {
-            addStep({ type: "tool_result", tool: toolName, result });
+            const safeResult = typeof result === "string"
+              ? result.replace(new RegExp(password, 'g'), '***')
+              : result;
+            addStep({ type: "tool_result", tool: toolName, result: safeResult });
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
@@ -285,12 +300,10 @@ export default function BrowserAgent() {
             });
           }
 
-          // Update URL display if navigate
-          if (toolName === "navigate") {
-            setCurrentUrl(toolInput.url);
-          }
+          if (toolName === "navigate") setCurrentUrl(toolInput.url);
 
           if (toolName === "task_complete") {
+            if (toolInput.notes) setExtractedNotes(toolInput.notes);
             setAgentStatus("complete");
             setRunning(false);
             return;
@@ -314,12 +327,6 @@ export default function BrowserAgent() {
     addStep({ type: "stopped", content: "Agent stopped." });
   };
 
-  const examples = [
-    "Go to Macys.com, search for a men's dress shirt, select the first result, choose size M, and add it to the cart",
-    "Navigate to Amazon.com and find a bestselling Bluetooth speaker under $50",
-    "Go to google.com and search for the latest AI news"
-  ];
-
   const statusColors = {
     idle: "#6b7280", thinking: "#3b82f6", acting: "#8b5cf6",
     complete: "#10b981", stopped: "#f59e0b", error: "#ef4444"
@@ -329,72 +336,129 @@ export default function BrowserAgent() {
     complete: "Complete", stopped: "Stopped", error: "Error"
   };
 
-  // Config screen
-  if (!configured) {
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", background: "#0a0a0f",
+    border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0",
+    fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box"
+  };
+
+  // DISCLAIMER SCREEN
+  if (screen === "disclaimer") {
     return (
       <div style={{
-        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-        background: "#0a0a0f", minHeight: "100vh", color: "#e2e8f0",
-        display: "flex", alignItems: "center", justifyContent: "center"
+        fontFamily: "'JetBrains Mono', monospace", background: "#0a0a0f",
+        minHeight: "100vh", color: "#e2e8f0", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 24
       }}>
         <div style={{
-          width: 440, padding: 32, background: "#0d0d14",
-          border: "1px solid #1e293b", borderRadius: 12,
+          maxWidth: 540, padding: 36, background: "#0d0d14",
+          border: "1px solid #dc2626", borderRadius: 12,
           display: "flex", flexDirection: "column", gap: 20
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: "linear-gradient(135deg, #10b981, #3b82f6)",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20
-            }}>🤖</div>
+            <div style={{ fontSize: 32 }}>⚕️</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", letterSpacing: "0.05em" }}>BROWSER AGENT</div>
-              <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.1em" }}>REAL BROWSER · GPT-4o</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", letterSpacing: "0.05em" }}>
+                eCW CLINICAL AGENT
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.1em" }}>
+                AUTHORIZED PERSONNEL ONLY
+              </div>
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.12em", marginBottom: 8 }}>OPENAI API KEY</div>
-            <input
-              type="password"
-              value={openaiKey}
-              onChange={e => setOpenaiKey(e.target.value)}
-              placeholder="sk-..."
-              style={{
-                width: "100%", padding: "10px 12px", background: "#111827",
-                border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0",
-                fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box"
-              }}
-            />
+          <div style={{
+            padding: 16, background: "#1a0a0a", border: "1px solid #dc2626",
+            borderRadius: 8, fontSize: 12, color: "#fca5a5", lineHeight: 1.8
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 8, color: "#ef4444", fontSize: 13 }}>
+              ⚠️ IMPORTANT — READ BEFORE CONTINUING
+            </div>
+            <div>By proceeding, you confirm that:</div>
+            <div style={{ marginTop: 8, paddingLeft: 12 }}>
+              • You are a licensed medical professional or authorized staff member<br/>
+              • You have legitimate authorization to access the patient records you will retrieve<br/>
+              • Your use of this tool complies with HIPAA and your organization's policies<br/>
+              • Patient notes displayed will not be copied, stored, or shared inappropriately<br/>
+              • You take full responsibility for appropriate use of patient data
+            </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.12em", marginBottom: 8 }}>BACKEND URL</div>
-            <input
-              type="text"
-              value={backendUrl}
-              onChange={e => setBackendUrl(e.target.value)}
-              placeholder="https://your-app.onrender.com"
-              style={{
-                width: "100%", padding: "10px 12px", background: "#111827",
-                border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0",
-                fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box"
-              }}
-            />
-            <div style={{ fontSize: 10, color: "#334155", marginTop: 6 }}>
-              The URL of your Render backend (e.g. https://browser-agent-backend.onrender.com)
-            </div>
+          <div style={{
+            padding: 12, background: "#111827", border: "1px solid #1e293b",
+            borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.7
+          }}>
+            <div style={{ color: "#94a3b8", marginBottom: 4 }}>🔒 PRIVACY</div>
+            Your credentials are used only to log in and are never stored or transmitted anywhere
+            other than directly to your eCW portal. Notes are displayed on screen only and not saved.
           </div>
 
           <button
-            onClick={() => setConfigured(true)}
-            disabled={!openaiKey.trim().startsWith("sk-") || !backendUrl.trim()}
+            onClick={() => setScreen("config")}
             style={{
-              padding: 12, background: "linear-gradient(135deg, #10b981, #3b82f6)",
+              padding: 14, background: "linear-gradient(135deg, #dc2626, #991b1b)",
               border: "none", borderRadius: 8, color: "white",
-              fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "0.08em",
-              opacity: (!openaiKey.trim().startsWith("sk-") || !backendUrl.trim()) ? 0.4 : 1
+              fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "0.08em"
+            }}
+          >
+            I UNDERSTAND — CONTINUE AS AUTHORIZED STAFF →
+          </button>
+        </div>
+        <style>{`* { box-sizing: border-box; }`}</style>
+      </div>
+    );
+  }
+
+  // CONFIG SCREEN
+  if (screen === "config") {
+    const ready = openaiKey.trim().startsWith("sk-") && backendUrl.trim() && ecwUrl.trim() && username.trim() && password.trim();
+    return (
+      <div style={{
+        fontFamily: "'JetBrains Mono', monospace", background: "#0a0a0f",
+        minHeight: "100vh", color: "#e2e8f0", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 24
+      }}>
+        <div style={{
+          width: 480, padding: 32, background: "#0d0d14",
+          border: "1px solid #1e293b", borderRadius: 12,
+          display: "flex", flexDirection: "column", gap: 16
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+            <div style={{ fontSize: 28 }}>⚕️</div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>eCW CLINICAL AGENT</div>
+              <div style={{ fontSize: 11, color: "#64748b" }}>CONFIGURATION</div>
+            </div>
+          </div>
+
+          {[
+            { label: "OPENAI API KEY", value: openaiKey, set: setOpenaiKey, placeholder: "sk-...", type: "password" },
+            { label: "BACKEND URL", value: backendUrl, set: setBackendUrl, placeholder: "https://your-app.onrender.com", type: "text" },
+            { label: "eCW PORTAL URL", value: ecwUrl, set: setEcwUrl, placeholder: "https://yourpractice.eclinicalweb.com", type: "text" },
+            { label: "eCW USERNAME", value: username, set: setUsername, placeholder: "your.username", type: "text" },
+            { label: "eCW PASSWORD", value: password, set: setPassword, placeholder: "••••••••", type: "password" },
+          ].map(({ label, value, set, placeholder, type }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.12em", marginBottom: 6 }}>{label}</div>
+              <input
+                type={type}
+                value={value}
+                onChange={e => set(e.target.value)}
+                placeholder={placeholder}
+                style={inputStyle}
+              />
+            </div>
+          ))}
+
+          <button
+            onClick={() => setScreen("agent")}
+            disabled={!ready}
+            style={{
+              marginTop: 8, padding: 12,
+              background: ready ? "linear-gradient(135deg, #10b981, #3b82f6)" : "#1e293b",
+              border: "none", borderRadius: 8, color: ready ? "white" : "#475569",
+              fontSize: 13, fontWeight: 700, cursor: ready ? "pointer" : "not-allowed",
+              letterSpacing: "0.08em"
             }}
           >
             LAUNCH AGENT →
@@ -405,47 +469,53 @@ export default function BrowserAgent() {
     );
   }
 
+  // AGENT SCREEN
+  const examples = [
+    "Search for patient John Smith, find their most recent progress note, and display it",
+    "Log in and retrieve the last 3 encounter notes for patient Jane Doe DOB 01/15/1980",
+    "Find patient Robert Johnson and extract all notes from their last visit"
+  ];
+
   return (
     <div style={{
-      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-      background: "#0a0a0f", minHeight: "100vh", color: "#e2e8f0",
-      display: "flex", flexDirection: "column"
+      fontFamily: "'JetBrains Mono', monospace", background: "#0a0a0f",
+      minHeight: "100vh", color: "#e2e8f0", display: "flex", flexDirection: "column"
     }}>
       {/* Header */}
       <div style={{
-        borderBottom: "1px solid #1e293b", padding: "16px 24px",
+        borderBottom: "1px solid #1e293b", padding: "14px 24px",
         display: "flex", alignItems: "center", gap: 16, background: "#0d0d14"
       }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 8,
-          background: "linear-gradient(135deg, #10b981, #3b82f6)",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18
-        }}>🤖</div>
+        <div style={{ fontSize: 24 }}>⚕️</div>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.05em", color: "#f1f5f9" }}>BROWSER AGENT</div>
-          <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.1em" }}>REAL BROWSER · GPT-4o · STEEL.DEV</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", letterSpacing: "0.05em" }}>
+            eCW CLINICAL AGENT
+          </div>
+          <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em" }}>
+            AUTHORIZED STAFF ONLY · GPT-4o · REAL BROWSER
+          </div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
             width: 8, height: 8, borderRadius: "50%",
             background: statusColors[agentStatus],
             boxShadow: `0 0 8px ${statusColors[agentStatus]}`,
             animation: running ? "pulse 1.5s infinite" : "none"
           }} />
-          <span style={{ fontSize: 12, color: statusColors[agentStatus], letterSpacing: "0.08em" }}>
+          <span style={{ fontSize: 11, color: statusColors[agentStatus], letterSpacing: "0.08em" }}>
             {statusLabels[agentStatus]}
           </span>
           {currentUrl && (
             <div style={{
-              marginLeft: 16, padding: "4px 12px", background: "#1e293b", borderRadius: 20,
-              fontSize: 11, color: "#94a3b8", maxWidth: 300,
+              marginLeft: 8, padding: "3px 10px", background: "#1e293b", borderRadius: 20,
+              fontSize: 10, color: "#94a3b8", maxWidth: 260,
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
             }}>
               🌐 {currentUrl}
             </div>
           )}
           <button
-            onClick={() => { setConfigured(false); setSteps([]); setCurrentUrl(""); setAgentStatus("idle"); }}
+            onClick={() => { setScreen("config"); setSteps([]); setExtractedNotes(""); setAgentStatus("idle"); }}
             style={{
               marginLeft: 8, padding: "4px 10px", background: "#1e293b",
               border: "1px solid #334155", borderRadius: 6, color: "#64748b",
@@ -460,23 +530,22 @@ export default function BrowserAgent() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Left Panel */}
         <div style={{
-          width: 340, borderRight: "1px solid #1e293b", padding: 20,
-          display: "flex", flexDirection: "column", gap: 16,
+          width: 320, borderRight: "1px solid #1e293b", padding: 20,
+          display: "flex", flexDirection: "column", gap: 14,
           background: "#0d0d14", overflowY: "auto"
         }}>
           <div>
-            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.12em", marginBottom: 8 }}>TASK</div>
+            <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.12em", marginBottom: 6 }}>
+              PATIENT LOOKUP TASK
+            </div>
             <textarea
               value={task}
               onChange={e => setTask(e.target.value)}
-              placeholder="Describe what you want the agent to do..."
+              placeholder="e.g. Search for patient John Smith and retrieve their most recent progress note..."
               disabled={running}
               style={{
-                width: "100%", minHeight: 120, padding: 12,
-                background: "#111827", border: "1px solid #1e293b",
-                borderRadius: 8, color: "#e2e8f0", fontSize: 13,
-                fontFamily: "inherit", resize: "vertical", outline: "none",
-                lineHeight: 1.6, boxSizing: "border-box"
+                ...inputStyle, minHeight: 110, resize: "vertical",
+                lineHeight: 1.6, fontFamily: "inherit"
               }}
             />
           </div>
@@ -491,7 +560,7 @@ export default function BrowserAgent() {
                   ? "linear-gradient(135deg, #dc2626, #b91c1c)"
                   : "linear-gradient(135deg, #10b981, #3b82f6)",
                 border: "none", borderRadius: 8, color: "white",
-                fontSize: 13, fontWeight: 700, cursor: "pointer",
+                fontSize: 12, fontWeight: 700, cursor: "pointer",
                 letterSpacing: "0.08em",
                 opacity: (!running && !task.trim()) ? 0.4 : 1
               }}
@@ -500,28 +569,28 @@ export default function BrowserAgent() {
             </button>
             {!running && steps.length > 0 && (
               <button
-                onClick={() => { setSteps([]); setCurrentUrl(""); setAgentStatus("idle"); }}
+                onClick={() => { setSteps([]); setExtractedNotes(""); setCurrentUrl(""); setAgentStatus("idle"); }}
                 style={{
-                  padding: "10px 16px", background: "#1e293b",
+                  padding: "10px 14px", background: "#1e293b",
                   border: "1px solid #334155", borderRadius: 8,
-                  color: "#94a3b8", fontSize: 13, cursor: "pointer"
+                  color: "#94a3b8", fontSize: 12, cursor: "pointer"
                 }}
               >Clear</button>
             )}
           </div>
 
           <div>
-            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.12em", marginBottom: 8 }}>EXAMPLES</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.12em", marginBottom: 6 }}>EXAMPLES</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {examples.map((ex, i) => (
                 <button
                   key={i}
                   onClick={() => setTask(ex)}
                   disabled={running}
                   style={{
-                    padding: "8px 12px", background: "#111827",
+                    padding: "7px 10px", background: "#111827",
                     border: "1px solid #1e293b", borderRadius: 6,
-                    color: "#94a3b8", fontSize: 11, cursor: "pointer",
+                    color: "#94a3b8", fontSize: 10, cursor: "pointer",
                     textAlign: "left", lineHeight: 1.5, transition: "border-color 0.2s"
                   }}
                   onMouseEnter={e => e.target.style.borderColor = "#10b981"}
@@ -530,102 +599,132 @@ export default function BrowserAgent() {
               ))}
             </div>
           </div>
+
+          <div style={{
+            padding: 10, background: "#0a1a0a", border: "1px solid #166534",
+            borderRadius: 8, fontSize: 10, color: "#4ade80", lineHeight: 1.7
+          }}>
+            🔒 Credentials are used only for this session and never stored.
+            Notes are displayed on screen only.
+          </div>
         </div>
 
         {/* Right Panel */}
-        <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-          {steps.length === 0 && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+          {/* Extracted Notes Panel */}
+          {extractedNotes && (
             <div style={{
-              flex: 1, display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", color: "#334155", gap: 16
+              padding: 16, background: "#0a1a0a", borderBottom: "1px solid #166534",
+              maxHeight: "35%", overflowY: "auto"
             }}>
-              <div style={{ fontSize: 48 }}>🤖</div>
-              <div style={{ fontSize: 14, letterSpacing: "0.1em" }}>REAL BROWSER AGENT READY</div>
-              <div style={{ fontSize: 12, color: "#1e293b" }}>Enter a task and click RUN AGENT</div>
+              <div style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.1em", marginBottom: 8, fontWeight: 700 }}>
+                📋 EXTRACTED NOTES
+              </div>
+              <pre style={{
+                whiteSpace: "pre-wrap", fontSize: 12, color: "#e2e8f0",
+                lineHeight: 1.7, margin: 0, fontFamily: "inherit"
+              }}>
+                {extractedNotes}
+              </pre>
             </div>
           )}
 
-          {steps.map((step) => (
-            <div key={step.id} style={{
-              padding: step.type === "screenshot" ? 4 : "12px 16px",
-              borderRadius: 8, border: "1px solid",
-              animation: "fadeIn 0.3s ease",
-              ...(step.type === "task" ? { background: "#1e293b", borderColor: "#334155", fontSize: 13, color: "#f1f5f9" }
-                : step.type === "thought" ? { background: "#0f172a", borderColor: "#1e293b", fontSize: 12, color: "#94a3b8", fontStyle: "italic" }
-                : step.type === "tool" ? { background: "#0f172a", borderColor: (TOOL_COLORS[step.tool] || "#3b82f6") + "44", fontSize: 12 }
-                : step.type === "screenshot" ? { background: "#0a0f1a", borderColor: "#f59e0b44" }
-                : step.type === "tool_result" ? { background: "#0a0f1a", borderColor: "#1e293b", fontSize: 12, color: "#64748b" }
-                : step.type === "error" ? { background: "#1a0a0a", borderColor: "#dc2626", fontSize: 12, color: "#f87171" }
-                : { background: "#0a1a0a", borderColor: "#10b981", fontSize: 12, color: "#34d399" })
-            }}>
-              {step.type === "task" && (
-                <div>
-                  <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em", marginBottom: 4 }}>TASK</div>
-                  <div>{step.content}</div>
-                </div>
-              )}
-              {step.type === "thought" && (
-                <div>
-                  <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em", marginBottom: 4 }}>💭 THINKING</div>
-                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{step.content}</div>
-                </div>
-              )}
-              {step.type === "tool" && (
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 16 }}>{TOOL_ICONS[step.tool] || "🔧"}</span>
-                    <span style={{ color: TOOL_COLORS[step.tool] || "#3b82f6", fontWeight: 700, letterSpacing: "0.08em", fontSize: 11 }}>
-                      {step.tool?.toUpperCase()}
-                    </span>
-                  </div>
-                  <div style={{ background: "#070d1a", padding: "8px 10px", borderRadius: 4, fontSize: 11 }}>
-                    {Object.entries(step.input).map(([k, v]) => (
-                      <div key={k} style={{ marginBottom: 2 }}>
-                        <span style={{ color: "#64748b" }}>{k}: </span>
-                        <span style={{ color: "#e2e8f0" }}>{JSON.stringify(v)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {step.type === "screenshot" && (
-                <img src={step.image} alt="Browser screenshot"
-                  style={{ width: "100%", borderRadius: 6, display: "block" }} />
-              )}
-              {step.type === "tool_result" && (
-                <div>
-                  <div style={{ fontSize: 10, color: "#334155", letterSpacing: "0.1em", marginBottom: 4 }}>
-                    {TOOL_ICONS[step.tool]} RESULT
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{step.result}</div>
-                </div>
-              )}
-              {(step.type === "done" || step.type === "stopped" || step.type === "error") && (
-                <div>
-                  <div style={{ fontSize: 10, letterSpacing: "0.1em", marginBottom: 4, opacity: 0.7 }}>
-                    {step.type === "done" ? "✅ COMPLETE" : step.type === "stopped" ? "⏹ STOPPED" : "❌ ERROR"}
-                  </div>
-                  <div>{step.content}</div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {running && (
-            <div style={{
-              padding: "12px 16px", borderRadius: 8,
-              background: "#0f172a", border: "1px solid #10b98144",
-              fontSize: 12, color: "#10b981", display: "flex", alignItems: "center", gap: 10
-            }}>
+          {/* Steps Feed */}
+          <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+            {steps.length === 0 && (
               <div style={{
-                width: 16, height: 16, border: "2px solid #10b981",
-                borderTopColor: "transparent", borderRadius: "50%",
-                animation: "spin 0.8s linear infinite"
-              }} />
-              Agent working...
-            </div>
-          )}
-          <div ref={stepsEndRef} />
+                flex: 1, display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", color: "#334155", gap: 12
+              }}>
+                <div style={{ fontSize: 40 }}>⚕️</div>
+                <div style={{ fontSize: 13, letterSpacing: "0.1em" }}>CLINICAL AGENT READY</div>
+                <div style={{ fontSize: 11, color: "#1e293b" }}>Enter a patient lookup task and click RUN AGENT</div>
+              </div>
+            )}
+
+            {steps.map((step) => (
+              <div key={step.id} style={{
+                padding: step.type === "screenshot" ? 4 : "10px 14px",
+                borderRadius: 8, border: "1px solid",
+                animation: "fadeIn 0.3s ease",
+                ...(step.type === "task" ? { background: "#1e293b", borderColor: "#334155", fontSize: 12, color: "#f1f5f9" }
+                  : step.type === "thought" ? { background: "#0f172a", borderColor: "#1e293b", fontSize: 11, color: "#94a3b8", fontStyle: "italic" }
+                  : step.type === "tool" ? { background: "#0f172a", borderColor: (TOOL_COLORS[step.tool] || "#3b82f6") + "44", fontSize: 11 }
+                  : step.type === "screenshot" ? { background: "#0a0f1a", borderColor: "#f59e0b44" }
+                  : step.type === "tool_result" ? { background: "#0a0f1a", borderColor: "#1e293b", fontSize: 11, color: "#64748b" }
+                  : step.type === "error" ? { background: "#1a0a0a", borderColor: "#dc2626", fontSize: 11, color: "#f87171" }
+                  : { background: "#0a1a0a", borderColor: "#10b981", fontSize: 11, color: "#34d399" })
+              }}>
+                {step.type === "task" && (
+                  <div>
+                    <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em", marginBottom: 3 }}>TASK</div>
+                    <div>{step.content}</div>
+                  </div>
+                )}
+                {step.type === "thought" && (
+                  <div>
+                    <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em", marginBottom: 3 }}>💭 THINKING</div>
+                    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{step.content}</div>
+                  </div>
+                )}
+                {step.type === "tool" && (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span>{TOOL_ICONS[step.tool] || "🔧"}</span>
+                      <span style={{ color: TOOL_COLORS[step.tool] || "#3b82f6", fontWeight: 700, letterSpacing: "0.08em", fontSize: 10 }}>
+                        {step.tool?.toUpperCase()}
+                      </span>
+                    </div>
+                    <div style={{ background: "#070d1a", padding: "6px 8px", borderRadius: 4, fontSize: 10 }}>
+                      {Object.entries(step.input).map(([k, v]) => (
+                        <div key={k} style={{ marginBottom: 1 }}>
+                          <span style={{ color: "#64748b" }}>{k}: </span>
+                          <span style={{ color: "#e2e8f0" }}>{JSON.stringify(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {step.type === "screenshot" && (
+                  <img src={step.image} alt="Browser screenshot"
+                    style={{ width: "100%", borderRadius: 6, display: "block" }} />
+                )}
+                {step.type === "tool_result" && (
+                  <div>
+                    <div style={{ fontSize: 9, color: "#334155", letterSpacing: "0.1em", marginBottom: 3 }}>
+                      {TOOL_ICONS[step.tool]} RESULT
+                    </div>
+                    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{step.result}</div>
+                  </div>
+                )}
+                {(step.type === "done" || step.type === "stopped" || step.type === "error") && (
+                  <div>
+                    <div style={{ fontSize: 9, letterSpacing: "0.1em", marginBottom: 3, opacity: 0.7 }}>
+                      {step.type === "done" ? "✅ COMPLETE" : step.type === "stopped" ? "⏹ STOPPED" : "❌ ERROR"}
+                    </div>
+                    <div>{step.content}</div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {running && (
+              <div style={{
+                padding: "10px 14px", borderRadius: 8,
+                background: "#0f172a", border: "1px solid #10b98144",
+                fontSize: 11, color: "#10b981", display: "flex", alignItems: "center", gap: 10
+              }}>
+                <div style={{
+                  width: 14, height: 14, border: "2px solid #10b981",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite"
+                }} />
+                Agent working...
+              </div>
+            )}
+            <div ref={stepsEndRef} />
+          </div>
         </div>
       </div>
 
