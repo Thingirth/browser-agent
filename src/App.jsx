@@ -144,21 +144,21 @@ CREDENTIALS (never display these in your responses):
 
 EXACT LOGIN WORKFLOW FOR eCW v12:
 1. Navigate to the eCW URL
-2. Take a screenshot to confirm the login page loaded
-3. Wait 2 seconds
-4. Use type_slow on the username field. The selector is: input[type="text"], or try input.form-control, or the first visible input
+2. Wait 2 seconds
+3. Take a screenshot to confirm the login page loaded
+4. Use type_slow on the username field with selector: input[type="text"]
 5. Wait 1 second
-6. Click the "Next" button (selector: button[type="submit"], or text "Next")
-7. Wait 2 seconds - password screen will load
-8. Take a screenshot to confirm password screen
-9. Use type_slow on the password field (selector: input[type="password"])
+6. Press Enter using press_key tool with key "Enter" — this submits the username form
+7. Wait 3 seconds for password screen to load
+8. Take a screenshot to confirm password screen loaded (you should see input[type="password"])
+9. Use type_slow on the password field with selector: input[type="password"]
 10. Wait 1 second
-11. Click "Log In" button
-12. Wait 4 seconds for page to load
-13. Take a screenshot - you may see a DISCLAIMER popup saying "I AGREE" / "I DISAGREE"
-14. If you see the disclaimer, click "I AGREE" (selector: button containing "I AGREE", or text "I AGREE")
+11. Press Enter using press_key tool with key "Enter" — this submits the password
+12. Wait 5 seconds for dashboard to load
+13. Take a screenshot — you may see a DISCLAIMER popup with "I AGREE" button
+14. If disclaimer visible, click "I AGREE" using selector: button.agreeBtn, or text "I AGREE"
 15. Wait 3 seconds
-16. Take a screenshot to confirm you are logged in to the dashboard
+16. Take a screenshot to confirm you are on the eCW dashboard
 
 PATIENT SEARCH WORKFLOW:
 17. Look for a patient search icon or magnifying glass at the top of the page
