@@ -243,7 +243,7 @@ export default function ECWAgent() {
 
     try {
       // Navigate to eCW login page
-      const response = await fetch(`${backendUrl}/execute`, {
+      await fetch(`${backendUrl}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -252,7 +252,6 @@ export default function ECWAgent() {
           input: { url: ecwUrl }
         })
       });
-      const data = await response.json();
 
       // Get the live view URL from backend
       const liveRes = await fetch(`${backendUrl}/live-url?sessionId=${sessionId.current}`);
@@ -260,7 +259,7 @@ export default function ECWAgent() {
       if (liveData.url) setLiveViewUrl(liveData.url);
 
       setLoginStep("waiting_for_login");
-      addStep({ type: "info", content: "Browser opened. Please log in manually in the Live View window, then click 'I have logged in' below." });
+      addStep({ type: "info", content: "Browser session is open and staying alive. Go to app.browserless.io → Active Browsers to see and control it. Log in to eCW there, then come back and click Continue." });
     } catch (err) {
       addStep({ type: "error", content: `Failed to start session: ${err.message}` });
       setLoginStep("idle");
@@ -604,37 +603,26 @@ export default function ECWAgent() {
                 borderRadius: 8, fontSize: 11, color: "#fbbf24", lineHeight: 1.7
               }}>
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>👤 YOUR TURN</div>
-                1. Click "Open Live Browser" below<br/>
-                2. Log in with your eCW credentials<br/>
-                3. Complete the Cloudflare checkbox<br/>
-                4. Once you see the eCW dashboard, come back here and click Continue
+                1. Click "Open Browserless Dashboard" below<br/>
+                2. Click <strong style={{color:"#fbbf24"}}>"Active Browsers"</strong> in the left sidebar<br/>
+                3. Click on the active session to open the live view<br/>
+                4. Log in with your eCW credentials &amp; complete Cloudflare<br/>
+                5. Once on the eCW dashboard, come back here and click Continue
               </div>
 
-              {liveViewUrl && (
-                <a
-                  href={liveViewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "block", padding: "10px 12px", textAlign: "center",
-                    background: "#1e3a5f", border: "1px solid #3b82f6",
-                    borderRadius: 8, color: "#60a5fa", fontSize: 12,
-                    textDecoration: "none", fontWeight: 700
-                  }}
-                >
-                  🖥️ OPEN LIVE BROWSER
-                </a>
-              )}
-
-              {!liveViewUrl && (
-                <div style={{
-                  padding: 10, background: "#111827", border: "1px solid #1e293b",
-                  borderRadius: 8, fontSize: 11, color: "#64748b"
-                }}>
-                  ⚠️ Live view URL not available. Your Browserless plan may not support live view.
-                  Log in via your regular browser session if possible.
-                </div>
-              )}
+              <a
+                href="https://app.browserless.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "block", padding: "10px 12px", textAlign: "center",
+                  background: "#1e3a5f", border: "1px solid #3b82f6",
+                  borderRadius: 8, color: "#60a5fa", fontSize: 12,
+                  textDecoration: "none", fontWeight: 700
+                }}
+              >
+                🖥️ OPEN BROWSERLESS DASHBOARD →
+              </a>
 
               <div>
                 <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.12em", marginBottom: 5 }}>
