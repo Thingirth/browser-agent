@@ -481,7 +481,7 @@ export default function ECWAgent() {
 
           {[
             { label: "OPENAI API KEY", val: openaiKey, set: setOpenaiKey, ph: "sk-...", type: "password" },
-            { label: "BACKEND URL", val: backendUrl, set: setBackendUrl, ph: "https://your-app.onrender.com", type: "text" },
+            { label: "BACKEND URL", val: backendUrl, set: setBackendUrl, ph: "http://localhost:3001", type: "text" },
             { label: "eCW LOGIN URL", val: ecwUrl, set: setEcwUrl, ph: "https://nygemeapp.eclinicalweb.com/mobiledoc/jsp/webemr/login/newLogin.jsp", type: "text" },
           ].map(({ label, val, set, ph, type }) => (
             <div key={label}>
@@ -494,7 +494,8 @@ export default function ECWAgent() {
             padding: 10, background: "#111827", border: "1px solid #1e293b",
             borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.7
           }}>
-            ℹ️ You will log in manually via a live browser view. No password is stored here.
+            ℹ️ The backend runs locally on your Mac and opens a real Chrome window.
+            You log in manually in that window. No credentials are stored.
           </div>
 
           <button
@@ -603,26 +604,20 @@ export default function ECWAgent() {
                 borderRadius: 8, fontSize: 11, color: "#fbbf24", lineHeight: 1.7
               }}>
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>👤 YOUR TURN</div>
-                1. Click "Open Browserless Dashboard" below<br/>
-                2. Click <strong style={{color:"#fbbf24"}}>"Active Browsers"</strong> in the left sidebar<br/>
-                3. Click on the active session to open the live view<br/>
-                4. Log in with your eCW credentials &amp; complete Cloudflare<br/>
-                5. Once on the eCW dashboard, come back here and click Continue
+                A Chrome window has opened on your Mac.<br/><br/>
+                1. Switch to that Chrome window<br/>
+                2. Log in with your eCW credentials<br/>
+                3. Complete the Cloudflare checkbox<br/>
+                4. Once you see the eCW dashboard,<br/>
+                &nbsp;&nbsp;&nbsp;come back here and click Continue
               </div>
 
-              <a
-                href="https://app.browserless.io"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "block", padding: "10px 12px", textAlign: "center",
-                  background: "#1e3a5f", border: "1px solid #3b82f6",
-                  borderRadius: 8, color: "#60a5fa", fontSize: 12,
-                  textDecoration: "none", fontWeight: 700
-                }}
-              >
-                🖥️ OPEN BROWSERLESS DASHBOARD →
-              </a>
+              <div style={{
+                padding: 10, background: "#0a1a0a", border: "1px solid #166534",
+                borderRadius: 8, fontSize: 11, color: "#4ade80"
+              }}>
+                ✅ Chrome window opened on your Mac
+              </div>
 
               <div>
                 <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.12em", marginBottom: 5 }}>
